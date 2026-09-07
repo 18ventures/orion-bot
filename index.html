@@ -1,0 +1,335 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#050b12"><title>Orion</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Orion">
+<style>
+:root{
+  --bg:#050b12; --surface:#0d1924; --surface-2:#0f1e2b; --border:#1c2b38;
+  --fg:#f5f7fa; --muted:#8b9aa8; --green:#35e58a; --red:#ff626a;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background-color:var(--bg);color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background-image:
+    radial-gradient(1px 1px at 24px 32px, rgba(255,255,255,.30) 1%, transparent 40%),
+    radial-gradient(1px 1px at 118px 84px, rgba(255,255,255,.20) 1%, transparent 40%),
+    radial-gradient(1.5px 1.5px at 64px 156px, rgba(255,255,255,.26) 1%, transparent 40%),
+    radial-gradient(1px 1px at 202px 18px, rgba(255,255,255,.16) 1%, transparent 40%),
+    radial-gradient(1px 1px at 168px 204px, rgba(255,255,255,.20) 1%, transparent 40%);
+  background-repeat:repeat; background-size:220px 220px; background-attachment:fixed;
+}
+.app{max-width:520px;margin:auto;padding:28px 16px 80px}
+.logo{text-align:center;font-weight:850;letter-spacing:.16em;font-size:21px;padding:8px 0 28px;color:var(--fg)}
+
+.hero{position:relative;text-align:center;padding:8px 0 4px}
+.hero::before{
+  content:"";position:absolute;inset:-20px -30px auto -30px;height:150px;
+  background:radial-gradient(closest-side, rgba(53,229,138,.20), transparent 72%);
+  pointer-events:none;
+}
+.eyebrow-row{position:relative;display:flex;align-items:center;justify-content:center;gap:10px;color:var(--muted);font-size:12px}
+.live-pill{display:inline-flex;align-items:center;gap:6px}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.live-dot.ok{animation:pulse 2.2s infinite}
+.live-dot.warn{background:var(--muted)}
+@keyframes pulse{
+  0%{box-shadow:0 0 0 0 rgba(53,229,138,.55)}
+  70%{box-shadow:0 0 0 9px rgba(53,229,138,0)}
+  100%{box-shadow:0 0 0 0 rgba(53,229,138,0)}
+}
+.balance-num{
+  position:relative;font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:46px;font-weight:700;letter-spacing:-0.01em;margin:10px 0 4px;
+}
+.balance-pnl{position:relative;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:14px}
+.green{color:var(--green)}
+.red{color:var(--red)}
+.muted{color:var(--muted)}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px}
+.card + .card{margin-top:12px}
+.section{font-size:16px;font-weight:750;margin:26px 2px 10px;color:var(--fg)}
+
+.pos-card{margin-top:22px;border-left-width:3px;border-left-style:solid}
+.pos-card.win{border-left-color:var(--green)}
+.pos-card.loss{border-left-color:var(--red)}
+.pos-head{display:flex;justify-content:space-between;align-items:center;font-weight:750;margin-bottom:2px}
+.pill{font-size:11px;font-weight:700;padding:5px 9px;border-radius:8px;letter-spacing:.02em}
+.pill.long{background:#113124;color:var(--green)}
+.pill.short{background:#341b22;color:var(--red)}
+.row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;font-size:14px}
+.row + .row{border-top:1px solid var(--border)}
+.row span:first-child{color:var(--muted)}
+.row b{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700}
+.empty{text-align:center;padding:20px;color:var(--muted);margin-top:22px}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px 10px}
+.stat small{display:block;color:var(--muted);font-size:11px;margin-bottom:8px}
+.stat b{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:20px}
+
+.hrow{padding:11px 0}
+.hrow + .hrow{border-top:1px solid var(--border)}
+.hrow-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.hrow-date{font-size:14px}
+.hrow-pnl{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:14px;white-space:nowrap}
+.hrow-meta{font-size:12px;color:var(--muted);margin-top:2px}
+.hrow-bar{height:3px;background:#151f2a;border-radius:2px;margin-top:9px;overflow:hidden}
+.hrow-bar-fill{height:100%;border-radius:2px}
+
+.copy-btn{background:#172635;color:var(--muted);border:0;border-radius:6px;padding:5px 9px;font-size:10px;margin-left:8px;cursor:pointer}
+.copy-btn:focus-visible, a:focus-visible, button:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+
+.notice{max-width:380px;margin-top:55px;text-align:center}
+.notice p{color:var(--muted);font-size:13px;line-height:1.5}
+.hidden{display:none}
+.status-line{text-align:center;font-size:11px;color:var(--muted);margin-top:20px;font-family:var(--mono)}
+
+.banner{position:relative;margin-top:14px;padding:9px 14px;border-radius:10px;font-size:12.5px;text-align:center;line-height:1.4}
+.banner.maintenance{background:rgba(245,166,35,.12);color:#f5a623;border:1px solid rgba(245,166,35,.30)}
+.banner.offline{background:var(--surface);color:var(--muted);border:1px solid var(--border)}
+
+.admin-panel{margin-top:22px}
+.admin-panel .card input[type="text"]{
+  width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--fg);
+  padding:9px 10px;font-size:13px;margin-top:8px;box-sizing:border-box;font-family:inherit;
+}
+.admin-panel .card button{
+  border:0;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;margin-top:10px;
+}
+.btn-primary{background:#f5a623;color:#1a1200}
+.btn-ghost{background:#172635;color:var(--muted);margin-left:8px}
+
+@keyframes reveal{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.reveal{animation:reveal .5s ease-out both}
+@media (prefers-reduced-motion: reduce){
+  .live-dot.ok{animation:none}
+  .reveal{animation:none}
+}
+</style></head><body>
+<div id="notice" class="app notice hidden"><div class="logo">ORION</div><p id="noticeText">This link isn't valid. Ask Nathan for your personal dashboard link.</p></div>
+<main id="dash" class="app hidden">
+  <div class="logo">ORION</div>
+  <div class="hero">
+    <div class="eyebrow-row">
+      <span>Total Balance</span>
+      <span class="live-pill"><span class="live-dot" id="liveDot"></span><span id="liveText">Live</span></span>
+    </div>
+    <div class="balance-num" id="balance">—</div>
+    <div class="balance-pnl" id="pnl">—</div>
+    <div id="banners"></div>
+  </div>
+
+  <section id="pos" class="card pos-card hidden">
+    <div class="pos-head"><span>Open Position</span><span id="side" class="pill">—</span></div>
+    <div class="row"><span>BTC Perpetual</span><b id="size">—</b></div>
+    <div class="row"><span>Entry Price</span><b id="entry">—</b></div>
+    <div class="row"><span>Mark Price</span><b id="mark">—</b></div>
+    <div class="row"><span>Unrealised P&amp;L</span><b id="unreal">—</b></div>
+  </section>
+  <section id="none" class="card empty">No open position</section>
+
+  <div class="section">Today</div>
+  <div class="stats">
+    <div class="stat"><small>Trades</small><b id="trades">—</b></div>
+    <div class="stat"><small>Wins</small><b id="wins">—</b></div>
+    <div class="stat"><small>Win Rate</small><b id="wr">—</b></div>
+  </div>
+
+  <div id="adminMaintenance" class="admin-panel hidden">
+    <div class="section">Push Notification</div>
+    <div class="card">
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn-ghost" onclick="quickBanner('maintenance','Maintenance')">Maintenance</button>
+        <button class="btn-ghost" onclick="quickBanner('pause','CPI release')">CPI</button>
+        <button class="btn-ghost" onclick="quickBanner('pause','NFP release')">NFP</button>
+        <button class="btn-ghost" onclick="quickBanner('pause','FOMC decision')">FOMC</button>
+        <button class="btn-ghost" onclick="quickBanner('pause','US market holiday')">US Holiday</button>
+      </div>
+      <input type="text" id="maintReason" placeholder="Custom reason…">
+      <div>
+        <button class="btn-primary" onclick="saveMaintenance(true)">Turn on</button>
+        <button class="btn-ghost" onclick="saveMaintenance(false)">Turn off</button>
+      </div>
+      <div class="hrow-meta" id="maintStatus" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <div id="historySection" class="hidden">
+    <div class="section">Last 7 Days</div>
+    <div id="historyTotals" class="card"></div>
+    <div id="historyList" class="card" style="margin-top:12px"></div>
+  </div>
+
+  <div class="status-line" id="status">connecting…</div>
+</main>
+<script>
+// Each client gets a personal link like https://your-app.up.railway.app/?t=THEIR_TOKEN
+// There is no password field and no client-typed ID: the token in the URL IS the
+// credential, and the server maps it server-side to exactly one account. This means
+// one client's link can never be edited to view another client's data.
+const TOKEN = new URLSearchParams(window.location.search).get("t");
+const money = n => "$" + Number(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+function showNotice(msg) {
+  document.getElementById("noticeText").textContent = msg;
+  notice.classList.remove("hidden");
+  dash.classList.add("hidden");
+}
+
+function setLive(state) {
+  // state: "ok" | "warn"
+  liveDot.className = "live-dot " + state;
+  liveText.textContent = state === "ok" ? "Live" : "Reconnecting";
+}
+
+function renderBanners(maintenance, marketStatus) {
+  let html = "";
+  if (maintenance && maintenance.active) {
+    const isPause = maintenance.type === "pause";
+    const icon = isPause ? "📅" : "🔧";
+    const lead = isPause ? "No trades today" : "Orion is under maintenance";
+    html += `<div class="banner maintenance">${icon} ${lead}${maintenance.reason ? " — " + maintenance.reason : ""}</div>`;
+  } else if (marketStatus && !marketStatus.trading) {
+    const msg = marketStatus.reason === "weekend"
+      ? "Orion is offline for the weekend — trading resumes Monday"
+      : "Orion is offline outside trading hours (08:00\u201323:00 UK)";
+    html += `<div class="banner offline">${msg}</div>`;
+  }
+  banners.innerHTML = html;
+}
+
+let maintType = "maintenance";
+
+function quickBanner(type, reason) {
+  maintType = type;
+  maintReason.value = reason;
+  saveMaintenance(true);
+}
+
+async function loadMaintenanceAdmin() {
+  try {
+    let r = await fetch(window.location.origin + "/api/admin/maintenance?t=" + encodeURIComponent(TOKEN));
+    let d = await r.json();
+    if (!r.ok) return;
+    adminMaintenance.classList.remove("hidden");
+    maintType = d.type || "maintenance";
+    maintReason.value = d.reason || "";
+    maintStatus.textContent = d.active ? `Currently on \u2014 "${d.reason}"` : "Currently off";
+  } catch (e) { /* non-fatal — admin control is a bonus for the master view */ }
+}
+
+async function saveMaintenance(active) {
+  try {
+    let r = await fetch(window.location.origin + "/api/admin/maintenance?t=" + encodeURIComponent(TOKEN), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active, reason: maintReason.value, type: maintType })
+    });
+    let d = await r.json();
+    if (!r.ok) { maintStatus.textContent = d.error || "Failed to save"; return; }
+    maintType = d.type || "maintenance";
+    maintStatus.textContent = d.active ? `Currently on \u2014 "${d.reason}"` : "Currently off";
+    load(); // refresh the banner immediately rather than waiting for the next 30s poll
+  } catch (e) { maintStatus.textContent = "Failed to save"; }
+}
+
+function formatDateLabel(iso) {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}
+
+function renderHistory(data) {
+  const t = data.period_totals;
+  const totalCls = t.pnl >= 0 ? "green" : "red";
+  historyTotals.innerHTML =
+    `<div class="row"><span>${data.days.length}-day total</span><span class="muted">${t.trades} trades · ${t.win_rate.toFixed(0)}% win rate</span></div>` +
+    `<div class="row"><span>Net P&L</span><span class="${totalCls}" style="font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700">${(t.pnl >= 0 ? "+" : "") + money(t.pnl)}</span></div>`;
+
+  const maxAbs = Math.max(1, ...data.days.map(d => Math.abs(d.pnl)));
+  historyList.innerHTML = data.days.map(d => {
+    if (d.trades === 0) {
+      return `<div class="hrow"><div class="hrow-top"><span class="hrow-date">${formatDateLabel(d.date)}</span><span class="hrow-pnl muted">No trades</span></div></div>`;
+    }
+    const cls = d.pnl >= 0 ? "green" : "red";
+    const pct = Math.max(6, Math.round(Math.abs(d.pnl) / maxAbs * 100));
+    return `<div class="hrow">
+      <div class="hrow-top"><span class="hrow-date">${formatDateLabel(d.date)}</span><span class="hrow-pnl ${cls}">${(d.pnl >= 0 ? "+" : "") + money(d.pnl)}</span></div>
+      <div class="hrow-meta">${d.trades} trades · ${d.win_rate.toFixed(0)}% win</div>
+      <div class="hrow-bar"><div class="hrow-bar-fill ${cls}" style="width:${pct}%;background:currentColor"></div></div>
+    </div>`;
+  }).join("");
+}
+
+async function loadHistory() {
+  try {
+    let r = await fetch(window.location.origin + "/api/client/history?t=" + encodeURIComponent(TOKEN));
+    let d = await r.json();
+    if (!r.ok) return;
+    historySection.classList.remove("hidden");
+    renderHistory(d);
+  } catch (e) { /* non-fatal — history is supplementary, dashboard still works without it */ }
+}
+
+async function load(first = false) {
+  try {
+    let r = await fetch(window.location.origin + "/api/client/dashboard?t=" + encodeURIComponent(TOKEN));
+    let d = await r.json();
+    if (!r.ok) throw Error(d.error || "Connection failed");
+
+    balance.textContent = money(d.balance);
+    trades.textContent = d.today.trades;
+    wins.textContent = d.today.wins;
+    wr.textContent = Number(d.today.win_rate).toFixed(0) + "%";
+
+    let p = d.position;
+    if (p) {
+      pos.classList.remove("hidden");
+      none.classList.add("hidden");
+      const isWin = p.unrealized_pnl >= 0;
+      pos.className = "card pos-card " + (isWin ? "win" : "loss");
+      side.textContent = (p.side === "LONG" ? "▲ LONG" : "▼ SHORT");
+      side.className = "pill " + (p.side === "LONG" ? "long" : "short");
+      size.textContent = Number(p.size).toFixed(5) + " BTC";
+      entry.textContent = money(p.entry_price);
+      mark.textContent = money(p.mark_price);
+      const pnlClass = isWin ? "green" : "red";
+      unreal.className = pnlClass;
+      unreal.textContent = (isWin ? "+" : "") + money(p.unrealized_pnl) + " (" + Number(p.unrealized_pnl_pct).toFixed(2) + "%)";
+      pnl.className = "balance-pnl " + pnlClass;
+      pnl.textContent = (isWin ? "+" : "") + money(p.unrealized_pnl) + " unrealised";
+    } else {
+      pos.classList.add("hidden");
+      none.classList.remove("hidden");
+      pnl.className = "balance-pnl muted";
+      pnl.textContent = "No open position";
+    }
+
+    setLive("ok");
+    status.textContent = "updated " + new Date().toLocaleTimeString();
+    renderBanners(d.maintenance, d.market_status);
+    if (first) {
+      notice.classList.add("hidden");
+      dash.classList.remove("hidden");
+      dash.classList.add("reveal");
+      loadHistory(); // once per page load — history doesn't need 30s polling
+    }
+    if (d.client_id === "1") loadMaintenanceAdmin();
+  } catch (e) {
+    if (first) showNotice(e.message);
+    else { setLive("warn"); status.textContent = "connection unavailable"; }
+  }
+}
+
+if (!TOKEN) {
+  showNotice("This link isn't valid. Ask Nathan for your personal dashboard link.");
+} else {
+  load(true);
+  setInterval(() => { if (!dash.classList.contains("hidden")) load(); }, 30000);
+}
+</script></body></html>
