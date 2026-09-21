@@ -1,0 +1,1543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Client Pipeline — Signal Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0B0D10;
+    --panel: #14171C;
+    --panel-raised: #1A1E24;
+    --hairline: #262B33;
+    --text: #E8E6DE;
+    --text-dim: #8A8F98;
+    --text-faint: #565B63;
+    --gold: #C9A227;
+    --gold-soft: rgba(201,162,39,0.14);
+    --green: #3ECF8E;
+    --green-soft: rgba(62,207,142,0.14);
+    --rust: #C1553B;
+    --rust-soft: rgba(193,85,59,0.14);
+  }
+  *{ box-sizing: border-box; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono{ font-family: 'IBM Plex Mono', monospace; }
+
+  header{
+    padding: 32px 28px 0;
+    border-bottom: 1px solid var(--hairline);
+    background: linear-gradient(180deg, rgba(201,162,39,0.05), transparent);
+  }
+  .header-top{
+    display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px; letter-spacing:0.14em; text-transform:uppercase;
+    color: var(--gold); margin:0 0 6px;
+  }
+  h1{ margin:0; font-size:26px; font-weight:800; letter-spacing:-0.01em; }
+  .level-badge{
+    display:flex; align-items:center; gap:14px;
+    background: var(--panel); border:1px solid var(--hairline); border-radius:10px;
+    padding:10px 18px;
+  }
+  .level-num{ font-family:'IBM Plex Mono', monospace; font-size:22px; font-weight:700; color: var(--gold); }
+  .level-label{ font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; }
+  .xp-bar-wrap{ width:120px; }
+  .xp-bar-track{ height:5px; background:var(--hairline); border-radius:3px; overflow:hidden; margin-top:4px; }
+  .xp-bar-fill{ height:100%; background: linear-gradient(90deg, var(--gold), #E8C862); border-radius:3px; transition: width 0.5s ease; }
+  .xp-text{ font-size:10px; color:var(--text-faint); margin-top:3px; font-family:'IBM Plex Mono', monospace; }
+
+  .tabs{ display:flex; gap:4px; margin-top:22px; }
+  .tab-btn{
+    padding:10px 22px; border:1px solid var(--hairline); border-bottom:none;
+    border-radius:10px 10px 0 0; background:var(--panel); color:var(--text-dim);
+    font-weight:700; font-size:13px; cursor:pointer; font-family:'IBM Plex Mono', monospace;
+    position:relative; top:1px;
+  }
+  .tab-btn.active{ background: var(--bg); color:var(--gold); border-color: var(--gold); }
+  .tab-btn:hover:not(.active){ color:var(--text); }
+
+  .stats-row{
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr));
+    gap:1px; background: var(--hairline);
+    border:1px solid var(--hairline); border-radius:0 10px 10px 10px; overflow:hidden;
+  }
+  .stat{ background: var(--panel); padding:14px 16px; }
+  .stat-val{ font-family:'IBM Plex Mono', monospace; font-size:22px; font-weight:600; }
+  .stat-label{ font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.07em; margin-top:2px; }
+  .stat-val.green{ color:var(--green); }
+  .stat-val.gold{ color:var(--gold); }
+  .stat-val.rust{ color:var(--rust); }
+  header .stats-row{ margin-top:0; padding-bottom:22px; }
+
+  .add-bar{
+    padding: 18px 28px; border-bottom:1px solid var(--hairline);
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+    background: var(--panel);
+  }
+  .add-bar input, .add-bar select{
+    background: var(--panel-raised); border:1px solid var(--hairline); color:var(--text);
+    padding:9px 12px; border-radius:7px; font-size:13px; font-family:'Inter',sans-serif;
+    outline:none;
+  }
+  .add-bar input:focus, .add-bar select:focus{ border-color: var(--gold); }
+  .add-bar input.name-input{ flex:1; min-width:160px; }
+  .btn{
+    background: var(--gold); color:#14171C; border:none; padding:9px 18px;
+    border-radius:7px; font-weight:700; font-size:13px; cursor:pointer;
+    transition: transform 0.1s ease, opacity 0.15s ease;
+  }
+  .btn:hover{ opacity:0.88; }
+  .btn:active{ transform: scale(0.97); }
+  .btn-ghost{
+    background:transparent; color:var(--text-dim); border:1px solid var(--hairline);
+  }
+  .btn-ghost:hover{ color:var(--text); border-color:var(--text-faint); }
+
+  .funnel{
+    display:grid; grid-template-columns: repeat(5, minmax(200px,1fr));
+    gap:14px; padding: 22px 28px 40px; overflow-x:auto;
+  }
+  .stage-col{ min-width:200px; }
+  .stage-head{
+    display:flex; justify-content:space-between; align-items:baseline;
+    padding: 0 4px 12px; border-bottom: 2px solid var(--hairline); margin-bottom:14px;
+  }
+  .stage-name{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-dim); }
+  .stage-count{ font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--text-faint); }
+  .stage-col[data-stage="4"] .stage-name{ color: var(--green); }
+
+  .card{
+    background: var(--panel); border:1px solid var(--hairline); border-radius:10px;
+    padding:14px; margin-bottom:12px; position:relative;
+  }
+  .card-name{ font-weight:700; font-size:14px; margin-bottom:2px; }
+  .card-source{ font-size:11px; color:var(--text-faint); margin-bottom:10px; }
+  .pulse-row{ display:flex; align-items:center; gap:6px; margin-bottom:12px; }
+  .pulse-dot{
+    width:7px; height:7px; border-radius:50%; background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s infinite;
+  }
+  .pulse-dot.stale{ background: var(--gold); box-shadow:0 0 8px var(--gold); animation:none; }
+  .pulse-dot.cold{ background: var(--rust); box-shadow:none; animation:none; opacity:0.6; }
+  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:0.35; } }
+  .pulse-text{ font-family:'IBM Plex Mono', monospace; font-size:10px; color:var(--text-faint); }
+
+  .toggle-row{ display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  .toggle-chip{
+    flex:1 1 auto; min-width:64px; text-align:center;
+    font-family:'IBM Plex Mono', monospace; font-size:9.5px; font-weight:600;
+    padding:6px 4px; border-radius:6px; cursor:pointer; user-select:none;
+    border:1px solid var(--hairline); background:transparent; color:var(--text-faint);
+    transition: all 0.15s ease; line-height:1.3;
+  }
+  .toggle-chip.on{ background: var(--green-soft); color: var(--green); border-color: var(--green); }
+  .toggle-chip:hover{ opacity:0.85; }
+
+  .card-actions{ display:flex; gap:6px; }
+  .payment-row{ font-size:11px; color:var(--text-dim); margin-bottom:10px; font-family:'IBM Plex Mono', monospace; padding:4px 6px; border-radius:5px; }
+  .payment-row.due-soon{ color: var(--gold); background: var(--gold-soft); font-weight:600; }
+  .payment-row.overdue{ color: var(--rust); background: var(--rust-soft); font-weight:700; }
+  .payment-row.no-date{ color: var(--text-faint); font-style: italic; }
+  .copy-mini{
+    background: var(--panel-raised); border:1px solid var(--hairline); color:var(--text-dim);
+    border-radius:5px; padding:1px 6px; font-size:10px; cursor:pointer; margin-left:2px;
+    font-family:'IBM Plex Mono', monospace; line-height:1.6;
+  }
+  .copy-mini:hover{ color:var(--gold); border-color:var(--gold); }
+  .activity-log{
+    margin-top:10px; padding:10px 12px; background:var(--panel-raised); border:1px solid var(--hairline);
+    border-radius:8px; max-height:180px; overflow-y:auto;
+  }
+  .log-entry{ font-size:11.5px; color:var(--text-dim); padding:4px 0; border-bottom:1px solid var(--hairline); }
+  .log-entry:last-child{ border-bottom:none; }
+  .log-ts{ color:var(--text-faint); font-family:'IBM Plex Mono', monospace; margin-right:8px; }
+  .edit-form{ display:flex; flex-direction:column; gap:8px; }
+  .edit-form input, .edit-form select{
+    background: var(--panel-raised); border:1px solid var(--hairline); color:var(--text);
+    padding:7px 9px; border-radius:6px; font-size:12px; font-family:'Inter',sans-serif; outline:none; width:100%;
+  }
+  .edit-form input:focus, .edit-form select:focus{ border-color: var(--gold); }
+  .edit-form label{ font-size:10px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:2px; display:block; }
+  .edit-form-actions{ display:flex; gap:6px; margin-top:2px; }
+  .edit-form-actions button{
+    flex:1; font-size:11px; padding:6px 8px; border-radius:6px; cursor:pointer;
+    font-family:'IBM Plex Mono', monospace; font-weight:600; border:1px solid transparent;
+  }
+  .edit-form-actions .save-btn{ background: var(--gold-soft); color: var(--gold); }
+  .edit-form-actions .cancel-btn{ background: transparent; color:var(--text-faint); border:1px solid var(--hairline); }
+  .card-actions button{
+    flex:1; font-size:11px; padding:6px 8px; border-radius:6px; cursor:pointer;
+    font-family:'IBM Plex Mono', monospace; font-weight:600;
+    background: var(--gold-soft); color: var(--gold); border:1px solid transparent;
+  }
+  .card-actions button.stall-btn{ background: transparent; color:var(--text-faint); border:1px solid var(--hairline); flex:none; width:30px; }
+  .card-actions button.stall-btn:hover{ color: var(--rust); border-color:var(--rust); }
+  .card-actions button.promote-btn{ background: var(--green-soft); color: var(--green); }
+  .card-actions button:hover{ opacity:0.85; }
+  .card-actions button:disabled{ opacity:0.3; cursor:default; }
+
+  .empty-slot{
+    border:1px dashed var(--hairline); border-radius:10px; padding:18px 10px;
+    text-align:center; color:var(--text-faint); font-size:11px;
+  }
+
+  .prospect-funnel{
+    display:grid; grid-template-columns: repeat(4, minmax(220px,1fr));
+    gap:14px; padding: 22px 28px 40px; overflow-x:auto;
+  }
+
+  .live-clients-grid{
+    display:grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr));
+    gap:14px; padding: 22px 28px 40px;
+  }
+
+  .badges-section{ padding: 0 28px 36px; }
+  .badges-title{ font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); margin-bottom:12px; }
+  .badges-row{ display:flex; flex-wrap:wrap; gap:10px; }
+  .badge{
+    display:flex; align-items:center; gap:8px;
+    background: var(--panel); border:1px solid var(--hairline); border-radius:20px;
+    padding:7px 14px 7px 10px; font-size:12px; color:var(--text-faint);
+  }
+  .badge.earned{ border-color: var(--gold); color: var(--text); }
+  .badge-icon{ width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; background:var(--hairline); }
+  .badge.earned .badge-icon{ background: var(--gold); color:#14171C; }
+
+  .confetti{ position:fixed; top:-10px; width:8px; height:14px; z-index:999; pointer-events:none; }
+
+  .sync-note{ text-align:center; padding:6px 20px 0; font-size:10px; color:var(--text-faint); font-family:'IBM Plex Mono', monospace; }
+  footer{ text-align:center; padding:20px; color:var(--text-faint); font-size:11px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div>
+      <p class="eyebrow">// mirror bot · client acquisition</p>
+      <h1 id="pageTitle">Client Pipeline</h1>
+    </div>
+    <div class="level-badge">
+      <div>
+        <div class="level-label">Operator Level</div>
+        <div class="level-num" id="levelNum">1</div>
+      </div>
+      <div class="xp-bar-wrap">
+        <div class="xp-bar-track"><div class="xp-bar-fill" id="xpFill" style="width:0%"></div></div>
+        <div class="xp-text" id="xpText">0 / 100 XP</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab-btn" id="tab-live" onclick="switchTab('live')">Live Clients</div>
+    <div class="tab-btn" id="tab-pipeline" onclick="switchTab('pipeline')">Pipeline</div>
+    <div class="tab-btn" id="tab-prospecting" onclick="switchTab('prospecting')">Prospecting</div>
+  </div>
+
+  <div class="stats-row" id="statsRow"></div>
+</header>
+
+<div class="add-bar" id="addBar"></div>
+
+<div id="mainContent"></div>
+<datalist id="clientNamesList"></datalist>
+
+<div class="badges-section">
+  <div class="badges-title">Milestones</div>
+  <div class="badges-row" id="badgesRow"></div>
+</div>
+
+<div class="sync-note" id="syncNote">synced</div>
+<footer>Client Pipeline CRM — hosted on Railway</footer>
+
+<script>
+const STAGES = ["Contacted", "Wallet Created", "Wallet Funded", "Exchange Account Live", "Agent Wallet Needs Approval", "Agent Approved"];
+const STAGE_XP = [5, 10, 15, 20, 22, 25];
+const GRADUATION_XP = 50;
+const MONTHLY_FEE_GBP = 60;
+const LAST_STAGE = STAGES.length - 1;
+const WALLET_STAGE = 1;
+const FUNDED_STAGE = 2;
+const EXCHANGE_STAGE = 3;
+const AGENT_PENDING_STAGE = 4;
+const AGENT_APPROVED_STAGE = 5;
+const ASSUMED_CONVERSION_RATE = 0.15; // assumed 15% of prospects convert every 30 days
+const SOURCES = ["Referral","Telegram","Warm intro","Cold outreach","Family","Friend","Social event","Business event","Other"];
+const PROSPECT_STAGES = ["Haven't Contacted", "Discussed Bot", "Discussed 2x", "Showed Material"];
+const PROSPECT_LAST_STAGE = PROSPECT_STAGES.length - 1;
+const PROSPECT_XP = [2, 5, 8, 12];
+
+const BADGES = [
+  { id:'first_contact', label:'First Contact', check: s => s.clients.length >= 1 },
+  { id:'first_live',    label:'First Client Live', check: s => s.liveClients.length >= 1 },
+  { id:'three_live',    label:'3 Clients Live', check: s => s.liveClients.length >= 3 },
+  { id:'five_live',     label:'5 Clients Live', check: s => s.liveClients.length >= 5 },
+  { id:'ten_pipeline',  label:'10 In Pipeline', check: s => s.clients.length >= 10 },
+];
+
+let state = {
+  clients: [],
+  liveClients: [],
+  prospects: [],
+  prospectHistory: { added: 0, converted: 0, declined: 0 },
+  xp: 0,
+  earnedBadges: [],
+  nextClientNumber: 2, // #1 is reserved for Nathan's own master account on the bot — never assign it to a client
+  telegramStageMigrated: false,
+  walletExchangeStagesMigrated: false
+};
+
+let activeTab = 'live';
+let editingId = null;
+
+// Optional: if you set PIPELINE_PASSWORD in Railway, put the same value here
+// so write requests authenticate. Leave blank if you didn't set one.
+const PIPELINE_KEY = '2tPq7jeoLSD8QGsXvpogmqMD8-fH-XSI';
+
+// The bot's own Railway URL — used to build a client's full shareable
+// dashboard link (base + "?t=" + their token). Update this if the bot's
+// domain ever changes.
+const DASHBOARD_BASE_URL = 'https://orion-bot-production-d68d.up.railway.app';
+
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function daysBetween(a,b){ return Math.floor((new Date(b) - new Date(a)) / 86400000); }
+function pad3(n){ return String(n).padStart(3, '0'); }
+
+async function loadState(){
+  const note = document.getElementById('syncNote');
+  try{
+    const res = await fetch('/api/state');
+    if(res.ok){
+      const loaded = await res.json();
+      state = Object.assign({
+        clients: [], liveClients: [], prospects: [],
+        prospectHistory: { added: 0, converted: 0, declined: 0 },
+        xp: 0, earnedBadges: []
+      }, loaded);
+      if(!state.liveClients) state.liveClients = [];
+      if(!state.prospects) state.prospects = [];
+      if(!state.prospectHistory) state.prospectHistory = { added: 0, converted: 0, declined: 0 };
+      if(!state.nextClientNumber) state.nextClientNumber = 2; // #1 reserved for the master account
+      if(typeof state.telegramStageMigrated !== 'boolean') state.telegramStageMigrated = false;
+      if(typeof state.walletExchangeStagesMigrated !== 'boolean') state.walletExchangeStagesMigrated = false;
+      // Migrate prospects added before the column/stage system existed
+      state.prospects = state.prospects.map(p => Object.assign({
+        stage: 0,
+        discussedBotCall: false,
+        discussedBotInPerson: false,
+        discussed2xCall: false,
+        discussed2xInPerson: false,
+        materialProfits: false,
+        materialWebsite: false
+      }, p, { stage: (typeof p.stage === 'number') ? p.stage : 0 }));
+      // Migrate clients added before client numbering existed — assign in existing array order
+      let nextNum = state.nextClientNumber;
+      state.clients.forEach(c => {
+        if(typeof c.clientNumber !== 'number'){
+          c.clientNumber = nextNum;
+          nextNum += 1;
+        }
+      });
+      state.nextClientNumber = Math.max(nextNum, state.nextClientNumber);
+      // Migrate clients added before the account-info fields existed
+      state.clients = state.clients.map(c => Object.assign({
+        initialBalance: null,
+        dateFunded: null,
+        dashboardTokenId: null,
+        dexWalletAddress: null,
+        hasPrivateKey: false,
+        commandsFunctioning: false,
+        testTradesSuccessful: false,
+        accountFullyFunded: false,
+        activityLog: []
+      }, c));
+      state.liveClients = state.liveClients.map(c => Object.assign({
+        initialBalance: null,
+        dateFunded: null,
+        dashboardTokenId: null,
+        dexWalletAddress: null,
+        hasPrivateKey: false,
+        commandsFunctioning: false,
+        testTradesSuccessful: false,
+        accountFullyFunded: false,
+        activityLog: []
+      }, c));
+      // Migrate clients that were at the old "Live" stage (hardcoded index 4,
+      // from before Live became its own tab) into the new liveClients array.
+      // This threshold is fixed on purpose — it must NOT track STAGES.length,
+      // since STAGES has changed shape since (and may again).
+      const OLD_LIVE_STAGE_INDEX = 4;
+      const stillInPipeline = [];
+      state.clients.forEach(c => {
+        if(c.stage >= OLD_LIVE_STAGE_INDEX){
+          c.stage = undefined;
+          delete c.lastMove;
+          state.liveClients.push(c);
+        } else {
+          stillInPipeline.push(c);
+        }
+      });
+      state.clients = stillInPipeline;
+      // One-time migration for removing the Telegram Integration stage.
+      // Old numbering: 0 Contacted, 1 Telegram Integration, 2 Wallet Ready, 3 Exchange.
+      // New numbering: 0 Contacted, 1 Wallet Ready, 2 Exchange.
+      if(!state.telegramStageMigrated){
+        state.clients.forEach(c => {
+          if(typeof c.stage === 'number'){
+            if(c.stage === 0){ /* Contacted stays 0 */ }
+            else if(c.stage <= 2){ c.stage = 1; } // old Telegram(1) or Wallet(2) -> Wallet(1)
+            else if(c.stage === 3){ c.stage = 2; } // old Exchange(3) -> Exchange(2)
+          }
+        });
+        state.telegramStageMigrated = true;
+      }
+      // One-time migration for splitting Wallet Ready -> Wallet Created + Wallet
+      // Funded, and Exchange -> Exchange Account Live + Agent Approved.
+      // Old numbering: 0 Contacted, 1 Wallet Ready, 2 Exchange.
+      // New numbering: 0 Contacted, 1 Wallet Created, 2 Wallet Funded,
+      //                3 Exchange Account Live, 4 Agent Approved.
+      // Nobody auto-qualifies for the two new checkpoints (Wallet Funded,
+      // Agent Approved) from old data — clients land at the closest
+      // equivalent stage and can be advanced manually from there.
+      if(!state.walletExchangeStagesMigrated){
+        state.clients.forEach(c => {
+          if(typeof c.stage === 'number'){
+            if(c.stage === 0){ /* Contacted stays 0 */ }
+            else if(c.stage === 1){ c.stage = 1; } // old Wallet Ready -> Wallet Created
+            else if(c.stage === 2){ c.stage = 3; } // old Exchange -> Exchange Account Live
+          }
+        });
+        state.walletExchangeStagesMigrated = true;
+      }
+    }
+    note.textContent = 'synced';
+  }catch(e){
+    console.log('No existing state or fetch failed, starting fresh', e);
+    note.textContent = 'offline — changes not saved';
+  }
+  render();
+}
+
+async function saveState(){
+  const note = document.getElementById('syncNote');
+  try{
+    const res = await fetch('/api/state', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(PIPELINE_KEY ? { 'x-pipeline-key': PIPELINE_KEY } : {})
+      },
+      body: JSON.stringify(state)
+    });
+    note.textContent = res.ok ? 'synced' : 'save failed — check server';
+  }catch(e){
+    console.error('Save failed', e);
+    note.textContent = 'offline — changes not saved';
+  }
+}
+
+function addXP(amount){
+  state.xp += amount;
+}
+
+function levelFromXP(xp){
+  let level = 1, needed = 100, cum = 0;
+  while(xp >= cum + needed){
+    cum += needed;
+    level++;
+    needed = Math.round(needed * 1.35);
+  }
+  return { level, cum, needed, progress: xp - cum };
+}
+
+function switchTab(tab){
+  activeTab = tab;
+  editingId = null;
+  render();
+}
+
+function addClient(){
+  const nameInput = document.getElementById('name');
+  const name = nameInput.value.trim();
+  if(!name) return;
+  const source = document.getElementById('source').value;
+  const referredBy = source === 'Referral' ? (document.getElementById('referredBy').value.trim() || null) : null;
+  const datePaidInput = document.getElementById('datePaid');
+  const datePaid = datePaidInput.value || null;
+  state.clients.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    clientNumber: state.nextClientNumber,
+    name, source, referredBy, stage: 0,
+    lastMove: todayStr(),
+    stalled: false,
+    metamask: false,
+    rabby: false,
+    hyperliquid: false,
+    lighter: false,
+    cex: false,
+    commandsFunctioning: false,
+    testTradesSuccessful: false,
+    accountFullyFunded: false,
+    datePaid,
+    initialBalance: null,
+    dateFunded: null,
+    dashboardTokenId: null,
+    dexWalletAddress: null,
+    hasPrivateKey: false,
+    activityLog: [{ ts: new Date().toISOString(), event: 'Added to pipeline' }]
+  });
+  state.nextClientNumber += 1;
+  addXP(STAGE_XP[0]);
+  nameInput.value = '';
+  datePaidInput.value = '';
+  checkBadges();
+  saveState();
+  render();
+}
+
+let expandedLogId = null;
+
+function toggleActivityLog(id){
+  expandedLogId = (expandedLogId === id) ? null : id;
+  render();
+}
+
+function formatLogTs(iso){
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+function activityLogButton(c){
+  return `<button type="button" class="stall-btn" title="Activity log" onclick="toggleActivityLog('${c.id}')">🕐</button>`;
+}
+
+function activityLogBlock(c){
+  if(expandedLogId !== c.id) return '';
+  const log = Array.isArray(c.activityLog) ? c.activityLog : [];
+  const items = log.length
+    ? log.map(e => `<div class="log-entry"><span class="log-ts">${formatLogTs(e.ts)}</span> ${escapeHtml(e.event)}</div>`).join('')
+    : `<div class="log-entry" style="color:var(--text-faint)">No activity logged yet</div>`;
+  return `<div class="activity-log">${items}</div>`;
+}
+
+function logActivity(client, event){
+  if(!client) return;
+  if(!Array.isArray(client.activityLog)) client.activityLog = [];
+  client.activityLog.unshift({ ts: new Date().toISOString(), event });
+  if(client.activityLog.length > 50) client.activityLog.length = 50; // cap growth
+}
+
+function advanceClient(id){
+  const c = state.clients.find(x => x.id === id);
+  if(!c || c.stage >= STAGES.length - 1) return;
+  if(c.stage === AGENT_PENDING_STAGE && !c.agentApproved) return; // don't advance past pending approval
+  c.stage += 1;
+  c.lastMove = todayStr();
+  c.stalled = false;
+  logActivity(c, `Advanced to "${STAGES[c.stage]}"`);
+  addXP(STAGE_XP[c.stage]);
+  checkBadges();
+  saveState();
+  render();
+}
+
+function retreatClient(id){
+  const c = state.clients.find(x => x.id === id);
+  if(!c || c.stage <= 0) return;
+  c.stage -= 1;
+  c.lastMove = todayStr();
+  logActivity(c, `Moved back to "${STAGES[c.stage]}"`);
+  saveState();
+  render();
+}
+
+function graduateClient(id){
+  const c = state.clients.find(x => x.id === id);
+  if(!c) return;
+  state.clients = state.clients.filter(x => x.id !== id);
+  delete c.stage;
+  delete c.lastMove;
+  c.stalled = false;
+  logActivity(c, '🎉 Went live');
+  state.liveClients.push(c);
+  addXP(GRADUATION_XP);
+  launchConfetti();
+  checkBadges();
+  saveState();
+  render();
+}
+
+function retreatToExchange(id){
+  const c = state.liveClients.find(x => x.id === id);
+  if(!c) return;
+  state.liveClients = state.liveClients.filter(x => x.id !== id);
+  c.stage = EXCHANGE_STAGE;
+  c.lastMove = todayStr();
+  state.clients.push(c);
+  saveState();
+  render();
+}
+
+function removeLiveClient(id){
+  state.liveClients = state.liveClients.filter(x => x.id !== id);
+  saveState();
+  render();
+}
+
+function addMonthsDate(d, n){ const nd = new Date(d); nd.setMonth(nd.getMonth()+n); return nd; }
+
+function nextRenewalDate(datePaidStr){
+  let d = new Date(datePaidStr + 'T00:00:00');
+  const now = new Date(todayStr() + 'T00:00:00');
+  while(d <= now){ d = addMonthsDate(d, 1); }
+  return d.toISOString().slice(0,10);
+}
+
+function findClientAnywhere(id){
+  return state.clients.find(x => x.id === id) || state.liveClients.find(x => x.id === id);
+}
+
+function startEdit(id){
+  editingId = id;
+  render();
+}
+
+function cancelEdit(){
+  editingId = null;
+  render();
+}
+
+function saveEdit(id){
+  const c = findClientAnywhere(id);
+  if(!c) return;
+  const name = document.getElementById(`edit-name-${id}`).value.trim();
+  const source = document.getElementById(`edit-source-${id}`).value;
+  const referredByEl = document.getElementById(`edit-referredBy-${id}`);
+  const referredBy = source === 'Referral' ? (referredByEl.value.trim() || null) : null;
+  const datePaid = document.getElementById(`edit-datePaid-${id}`).value || null;
+  const initialBalanceRaw = document.getElementById(`edit-initialBalance-${id}`).value;
+  const initialBalance = initialBalanceRaw === '' ? null : parseFloat(initialBalanceRaw);
+  const dateFunded = document.getElementById(`edit-dateFunded-${id}`).value || null;
+  const dashboardTokenId = document.getElementById(`edit-dashboardTokenId-${id}`).value.trim() || null;
+  const dexWalletAddress = document.getElementById(`edit-dexWalletAddress-${id}`).value.trim() || null;
+  const clientNumberEl = document.getElementById(`edit-clientNumber-${id}`);
+  const clientNumberRaw = clientNumberEl ? clientNumberEl.value.trim() : String(c.clientNumber || '');
+  const clientNumber = clientNumberRaw === '' ? c.clientNumber : parseInt(clientNumberRaw, 10);
+  if(clientNumber === 1){
+    alert('Client # 1 is permanently reserved for Nathan\'s own master account on the bot. Choose a different number — this client will never sync if left as 1.');
+    return;
+  }
+  if(name) c.name = name;
+  c.source = source;
+  c.referredBy = referredBy;
+  c.datePaid = datePaid;
+  c.initialBalance = initialBalance;
+  c.dateFunded = dateFunded;
+  c.dashboardTokenId = dashboardTokenId;
+  c.dexWalletAddress = dexWalletAddress;
+  c.clientNumber = clientNumber;
+  editingId = null;
+  saveState();
+  render();
+}
+
+async function setClientKey(id){
+  const input = document.getElementById(`edit-privateKeyInput-${id}`);
+  const val = input.value.trim();
+  if(!val){ alert('Enter a key first, or use Clear to remove an existing one.'); return; }
+  try{
+    const res = await fetch(`/api/clients/${id}/key`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(PIPELINE_KEY ? { 'x-pipeline-key': PIPELINE_KEY } : {}) },
+      body: JSON.stringify({ privateKey: val })
+    });
+    const data = await res.json();
+    if(res.ok){
+      input.value = '';
+      const c = findClientAnywhere(id);
+      if(c){
+        c.hasPrivateKey = data.hasPrivateKey;
+        logActivity(c, '🔑 Private key set');
+        saveState();
+      }
+      render();
+    } else {
+      alert('Failed to save key: ' + (data.error || 'unknown error'));
+    }
+  }catch(e){
+    alert('Request failed: ' + e.message);
+  }
+}
+
+async function clearClientKey(id){
+  if(!confirm('Remove the stored private key for this client? This cannot be undone.')) return;
+  try{
+    const res = await fetch(`/api/clients/${id}/key`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(PIPELINE_KEY ? { 'x-pipeline-key': PIPELINE_KEY } : {}) },
+      body: JSON.stringify({ privateKey: '' })
+    });
+    const data = await res.json();
+    if(res.ok){
+      const c = findClientAnywhere(id);
+      if(c){
+        c.hasPrivateKey = false;
+        logActivity(c, '🔑 Private key cleared');
+        saveState();
+      }
+      render();
+    } else {
+      alert('Failed to clear key: ' + (data.error || 'unknown error'));
+    }
+  }catch(e){
+    alert('Request failed: ' + e.message);
+  }
+}
+
+async function revealClientKey(id){
+  try{
+    const res = await fetch(`/api/clients/${id}/key/reveal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(PIPELINE_KEY ? { 'x-pipeline-key': PIPELINE_KEY } : {}) }
+    });
+    const data = await res.json();
+    const span = document.getElementById(`revealedKey-${id}`);
+    const copyBtn = document.getElementById(`copyKeyBtn-${id}`);
+    if(res.ok && span){
+      span.textContent = data.privateKey;
+      if(copyBtn) copyBtn.disabled = false;
+    } else {
+      alert('Failed to reveal key: ' + (data.error || 'unknown error'));
+    }
+  }catch(e){
+    alert('Request failed: ' + e.message);
+  }
+}
+
+function copyRevealedKey(id, btn){
+  const span = document.getElementById(`revealedKey-${id}`);
+  if(!span || !span.textContent) return;
+  navigator.clipboard.writeText(span.textContent);
+  flashCopyFeedback(btn);
+}
+
+function toggleStall(id){
+  const c = findClientAnywhere(id);
+  if(!c) return;
+  c.stalled = !c.stalled;
+  saveState();
+  render();
+}
+
+function toggleStatus(id, field){
+  const c = findClientAnywhere(id);
+  if(!c) return;
+  c[field] = !c[field];
+  if(field === 'agentApproved'){
+    logActivity(c, c[field] ? '✅ Agent wallet approved' : 'Agent wallet approval unchecked');
+  }
+  saveState();
+  render();
+}
+
+function removeClient(id){
+  state.clients = state.clients.filter(x => x.id !== id);
+  saveState();
+  render();
+}
+
+function addProspect(){
+  const nameInput = document.getElementById('prospectName');
+  const name = nameInput.value.trim();
+  if(!name) return;
+  const source = document.getElementById('prospectSource').value;
+  const referredBy = source === 'Referral' ? (document.getElementById('prospectReferredBy').value.trim() || null) : null;
+  state.prospects.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    name, source, referredBy,
+    stage: 0,
+    discussedBotCall: false,
+    discussedBotInPerson: false,
+    discussed2xCall: false,
+    discussed2xInPerson: false,
+    materialProfits: false,
+    materialWebsite: false,
+    addedDate: todayStr()
+  });
+  state.prospectHistory.added += 1;
+  nameInput.value = '';
+  saveState();
+  render();
+}
+
+function advanceProspect(id){
+  const p = state.prospects.find(x => x.id === id);
+  if(!p || p.stage >= PROSPECT_LAST_STAGE) return;
+  p.stage += 1;
+  addXP(PROSPECT_XP[p.stage]);
+  saveState();
+  render();
+}
+
+function retreatProspect(id){
+  const p = state.prospects.find(x => x.id === id);
+  if(!p || p.stage <= 0) return;
+  p.stage -= 1;
+  saveState();
+  render();
+}
+
+function toggleProspectStatus(id, field){
+  const p = state.prospects.find(x => x.id === id);
+  if(!p) return;
+  p[field] = !p[field];
+  saveState();
+  render();
+}
+
+function promoteProspect(id){
+  const p = state.prospects.find(x => x.id === id);
+  if(!p) return;
+  state.prospects = state.prospects.filter(x => x.id !== id);
+  state.prospectHistory.converted += 1;
+  state.clients.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    clientNumber: state.nextClientNumber,
+    name: p.name, source: p.source, referredBy: p.referredBy || null, stage: 0,
+    lastMove: todayStr(),
+    stalled: false,
+    metamask: false,
+    rabby: false,
+    hyperliquid: false,
+    lighter: false,
+    cex: false,
+    commandsFunctioning: false,
+    testTradesSuccessful: false,
+    accountFullyFunded: false,
+    datePaid: todayStr(),
+    initialBalance: null,
+    dateFunded: null,
+    dashboardTokenId: null,
+    dexWalletAddress: null,
+    hasPrivateKey: false,
+    activityLog: [{ ts: new Date().toISOString(), event: 'Converted from prospect' }]
+  });
+  state.nextClientNumber += 1;
+  addXP(STAGE_XP[0]);
+  checkBadges();
+  saveState();
+  render();
+}
+
+function declineProspect(id){
+  state.prospects = state.prospects.filter(x => x.id !== id);
+  state.prospectHistory.declined += 1;
+  saveState();
+  render();
+}
+
+function checkBadges(){
+  BADGES.forEach(b => {
+    if(!state.earnedBadges.includes(b.id) && b.check(state)){
+      state.earnedBadges.push(b.id);
+    }
+  });
+}
+
+function pulseClass(c){
+  if(c.stalled) return 'cold';
+  const days = daysBetween(c.lastMove, todayStr());
+  if(days >= 5) return 'stale';
+  return '';
+}
+function pulseLabel(c){
+  if(c.stalled) return 'Marked stalled';
+  const days = daysBetween(c.lastMove, todayStr());
+  if(days === 0) return 'Moved today';
+  if(days === 1) return '1 day since move';
+  return days + ' days since move';
+}
+
+function render(){
+  document.getElementById('tab-live').classList.toggle('active', activeTab === 'live');
+  document.getElementById('tab-pipeline').classList.toggle('active', activeTab === 'pipeline');
+  document.getElementById('tab-prospecting').classList.toggle('active', activeTab === 'prospecting');
+  const titles = { live: 'Live Clients', pipeline: 'Client Pipeline', prospecting: 'Prospecting' };
+  document.getElementById('pageTitle').textContent = titles[activeTab];
+
+  // Keep the "Referred by" autocomplete list current — sourced from
+  // everyone already in the pipeline or live, since a referral realistically
+  // only ever comes from someone already known to the business.
+  const allNames = [...state.liveClients, ...state.clients].map(c => c.name).filter(Boolean);
+  const uniqueNames = [...new Set(allNames)];
+  const namesList = document.getElementById('clientNamesList');
+  if(namesList) namesList.innerHTML = uniqueNames.map(n => `<option value="${escapeHtml(n)}">`).join('');
+
+  renderStatsAndAddBar();
+
+  const mainContent = document.getElementById('mainContent');
+  mainContent.innerHTML = '';
+  if(activeTab === 'live'){
+    mainContent.appendChild(buildLiveClients());
+  } else if(activeTab === 'pipeline'){
+    mainContent.appendChild(buildFunnel());
+  } else {
+    mainContent.appendChild(buildProspectFunnel());
+  }
+
+  const { level, needed, progress } = levelFromXP(state.xp);
+  document.getElementById('levelNum').textContent = level;
+  document.getElementById('xpFill').style.width = Math.min(100, (progress/needed)*100) + '%';
+  document.getElementById('xpText').textContent = `${progress} / ${needed} XP`;
+
+  const badgesRow = document.getElementById('badgesRow');
+  badgesRow.innerHTML = '';
+  BADGES.forEach(b => {
+    const earned = state.earnedBadges.includes(b.id);
+    const el = document.createElement('div');
+    el.className = 'badge' + (earned ? ' earned' : '');
+    el.innerHTML = `<div class="badge-icon">${earned ? '✓' : '·'}</div>${b.label}`;
+    badgesRow.appendChild(el);
+  });
+}
+
+function renderStatsAndAddBar(){
+  const statsRow = document.getElementById('statsRow');
+  const addBar = document.getElementById('addBar');
+
+  if(activeTab === 'live'){
+    const liveCount = state.liveClients.length;
+    const allPaying = [...state.clients, ...state.liveClients].filter(c => c.datePaid);
+    const monthlyRevenue = allPaying.length * MONTHLY_FEE_GBP;
+    const dueSoonCount = allPaying.filter(c => {
+      const renewal = nextRenewalDate(c.datePaid);
+      return daysBetween(todayStr(), renewal) <= 5;
+    }).length;
+
+    statsRow.innerHTML = `
+      <div class="stat"><div class="stat-val green" id="statLiveCount">${liveCount}</div><div class="stat-label">Live Clients</div></div>
+      <div class="stat"><div class="stat-val gold" id="statRevenue">£${monthlyRevenue.toLocaleString()}</div><div class="stat-label">Monthly Revenue</div></div>
+      <div class="stat"><div class="stat-val ${dueSoonCount > 0 ? 'gold' : ''}" id="statDueSoon">${dueSoonCount}</div><div class="stat-label">Renewals Due Soon</div></div>
+    `;
+    addBar.innerHTML = `<div style="color:var(--text-faint); font-size:12px; font-family:'IBM Plex Mono', monospace;">Clients land here automatically once they graduate from the Exchange stage in Pipeline.</div>`;
+
+  } else if(activeTab === 'pipeline'){
+    const total = state.clients.length;
+
+    statsRow.innerHTML = `
+      <div class="stat"><div class="stat-val" id="statTotal">${total}</div><div class="stat-label">In Pipeline</div></div>
+    `;
+
+    const sourceOptions = SOURCES.map(s => `<option value="${s}">${s}</option>`).join('');
+    addBar.innerHTML = `
+      <input id="name" class="name-input" placeholder="Client name or handle" />
+      <select id="source">${sourceOptions}</select>
+      <input id="referredBy" list="clientNamesList" placeholder="Referred by" style="display:none;" />
+      <input id="datePaid" type="date" title="Date paid (optional, can add later)" />
+      <button class="btn" onclick="addClient()">+ Add to pipeline</button>
+    `;
+    document.getElementById('name').addEventListener('keydown', e => { if(e.key === 'Enter') addClient(); });
+    const sourceSel = document.getElementById('source');
+    const referredByInput = document.getElementById('referredBy');
+    const toggleReferredBy = () => { referredByInput.style.display = sourceSel.value === 'Referral' ? '' : 'none'; };
+    sourceSel.addEventListener('change', toggleReferredBy);
+    toggleReferredBy();
+
+  } else {
+    const prospectCount = state.prospects.length;
+    const { added, converted } = state.prospectHistory;
+    const actualRate = added > 0 ? Math.round((converted / added) * 100) : 0;
+    const potentialRevenue = Math.round(prospectCount * ASSUMED_CONVERSION_RATE * MONTHLY_FEE_GBP);
+
+    statsRow.innerHTML = `
+      <div class="stat"><div class="stat-val" id="statProspects">${prospectCount}</div><div class="stat-label">Prospects</div></div>
+      <div class="stat"><div class="stat-val green" id="statConverted">${converted}</div><div class="stat-label">Converted (all-time)</div></div>
+      <div class="stat"><div class="stat-val gold" id="statActualRate">${actualRate}%</div><div class="stat-label">Actual Conversion Rate</div></div>
+      <div class="stat"><div class="stat-val gold" id="statPotential">£${potentialRevenue.toLocaleString()}</div><div class="stat-label">Potential Revenue</div></div>
+    `;
+
+    const sourceOptions = SOURCES.map(s => `<option value="${s}">${s}</option>`).join('');
+    addBar.innerHTML = `
+      <input id="prospectName" class="name-input" placeholder="Prospect name or handle" />
+      <select id="prospectSource">${sourceOptions}</select>
+      <input id="prospectReferredBy" list="clientNamesList" placeholder="Referred by" style="display:none;" />
+      <button class="btn" onclick="addProspect()">+ Add prospect</button>
+    `;
+    document.getElementById('prospectName').addEventListener('keydown', e => { if(e.key === 'Enter') addProspect(); });
+    const prospectSourceSel = document.getElementById('prospectSource');
+    const prospectReferredByInput = document.getElementById('prospectReferredBy');
+    const toggleProspectReferredBy = () => { prospectReferredByInput.style.display = prospectSourceSel.value === 'Referral' ? '' : 'none'; };
+    prospectSourceSel.addEventListener('change', toggleProspectReferredBy);
+    toggleProspectReferredBy();
+  }
+}
+
+function buildFunnel(){
+  const funnel = document.createElement('div');
+  funnel.className = 'funnel';
+  funnel.id = 'funnel';
+
+  STAGES.forEach((stageName, idx) => {
+    const col = document.createElement('div');
+    col.className = 'stage-col';
+    col.dataset.stage = idx;
+    const inStage = state.clients.filter(c => c.stage === idx);
+    col.innerHTML = `<div class="stage-head"><span class="stage-name">${stageName}</span><span class="stage-count">${inStage.length}</span></div>`;
+    if(inStage.length === 0){
+      col.innerHTML += `<div class="empty-slot">No clients here</div>`;
+    } else {
+      inStage.forEach(c => {
+        const isLast = idx === LAST_STAGE;
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        if(editingId === c.id){
+          const sourceOptions = SOURCES.map(s => `<option value="${s}" ${c.source===s?'selected':''}>${s}</option>`).join('');
+          card.innerHTML = `
+            <div class="edit-form">
+              <div>
+                <label>Name</label>
+                <input id="edit-name-${c.id}" value="${escapeHtml(c.name)}" />
+              </div>
+              <div>
+                <label>Source</label>
+                <select id="edit-source-${c.id}">${sourceOptions}</select>
+              </div>
+              <div id="edit-referredByWrap-${c.id}" style="display:${c.source==='Referral' ? '' : 'none'};">
+                <label>Referred by</label>
+                <input id="edit-referredBy-${c.id}" value="${escapeHtml(c.referredBy || '')}" />
+              </div>
+              <div>
+                <label>Date paid</label>
+                <input id="edit-datePaid-${c.id}" type="date" value="${c.datePaid || ''}" />
+              </div>
+              <div>
+                <label>Initial balance ($)</label>
+                <input id="edit-initialBalance-${c.id}" type="number" step="0.01" value="${c.initialBalance != null ? c.initialBalance : ''}" placeholder="0.00" />
+              </div>
+              <div>
+                <label>Date funded</label>
+                <input id="edit-dateFunded-${c.id}" type="date" value="${c.dateFunded || ''}" />
+              </div>
+              <div>
+                <label>Client # (never 1 — reserved for Nathan's master account)</label>
+                <input id="edit-clientNumber-${c.id}" type="number" min="2" value="${c.clientNumber || ''}" />
+              </div>
+              <div>
+                <label>Dashboard token ID</label>
+                <div style="display:flex; gap:6px;">
+                  <input id="edit-dashboardTokenId-${c.id}" value="${escapeHtml(c.dashboardTokenId || '')}" placeholder="CLIENT${c.clientNumber || 'N'}_DASHBOARD_TOKEN value" style="flex:1;" />
+                  <button type="button" class="save-btn" style="flex:none; padding:7px 10px;" onclick="generateDashboardToken('${c.id}')">Generate</button>
+                </div>
+              </div>
+              <div>
+                <label>DEX wallet address</label>
+                <input id="edit-dexWalletAddress-${c.id}" value="${escapeHtml(c.dexWalletAddress || '')}" placeholder="0x..." />
+              </div>
+              <div>
+                <label>DEX private key (agent wallet) — ${c.hasPrivateKey ? 'configured' : 'not set'}</label>
+                <div style="display:flex; gap:6px;">
+                  <input id="edit-privateKeyInput-${c.id}" type="password" placeholder="Paste to set/replace" style="flex:1;" />
+                  <button type="button" class="save-btn" style="flex:none; padding:7px 10px;" onclick="setClientKey('${c.id}')">Set</button>
+                </div>
+                <div style="display:flex; gap:6px; margin-top:6px; align-items:center;">
+                  <button type="button" class="cancel-btn" style="flex:none; padding:6px 10px;" ${c.hasPrivateKey ? '' : 'disabled'} onclick="revealClientKey('${c.id}')">Reveal</button>
+                  <button type="button" id="copyKeyBtn-${c.id}" class="copy-mini" style="padding:6px 10px;" disabled onclick="copyRevealedKey('${c.id}', this)">Copy</button>
+                  <button type="button" class="cancel-btn" style="flex:none; padding:6px 10px;" ${c.hasPrivateKey ? '' : 'disabled'} onclick="clearClientKey('${c.id}')">Clear</button>
+                  <span id="revealedKey-${c.id}" class="mono" style="font-size:10px; word-break:break-all; color:var(--gold);"></span>
+                </div>
+              </div>
+              <div class="edit-form-actions">
+                <button class="save-btn" onclick="saveEdit('${c.id}')">Save</button>
+                <button class="cancel-btn" onclick="cancelEdit()">Cancel</button>
+              </div>
+            </div>
+          `;
+          col.appendChild(card);
+          const editSourceSel = card.querySelector(`[id="edit-source-${c.id}"]`);
+          const editReferredByWrap = card.querySelector(`[id="edit-referredByWrap-${c.id}"]`);
+          editSourceSel.addEventListener('change', () => {
+            editReferredByWrap.style.display = editSourceSel.value === 'Referral' ? '' : 'none';
+          });
+          return;
+        }
+
+        let toggleRow = '';
+        if(idx === WALLET_STAGE){
+          toggleRow = `
+          <div class="toggle-row">
+            <div class="toggle-chip ${c.metamask ? 'on' : ''}" onclick="toggleStatus('${c.id}','metamask')">Metamask</div>
+            <div class="toggle-chip ${c.rabby ? 'on' : ''}" onclick="toggleStatus('${c.id}','rabby')">Rabby</div>
+          </div>`;
+        } else if(idx === EXCHANGE_STAGE){
+          toggleRow = `
+          <div class="toggle-row">
+            <div class="toggle-chip ${c.hyperliquid ? 'on' : ''}" onclick="toggleStatus('${c.id}','hyperliquid')">Hyperliquid</div>
+            <div class="toggle-chip ${c.lighter ? 'on' : ''}" onclick="toggleStatus('${c.id}','lighter')">Lighter</div>
+            <div class="toggle-chip ${c.cex ? 'on' : ''}" onclick="toggleStatus('${c.id}','cex')">CEX</div>
+          </div>`;
+        } else if(idx === AGENT_PENDING_STAGE){
+          toggleRow = `
+          <div class="toggle-row">
+            <div class="toggle-chip ${c.agentApproved ? 'on' : ''}" onclick="toggleStatus('${c.id}','agentApproved')">Agent Wallet Approved</div>
+          </div>`;
+        }
+
+        let paymentRow = `<div class="payment-row no-date">No payment date set</div>`;
+        if(c.datePaid){
+          const memberDays = daysBetween(c.datePaid, todayStr());
+          const renewal = nextRenewalDate(c.datePaid);
+          const daysToRenewal = daysBetween(todayStr(), renewal);
+          const overdue = daysToRenewal <= 1;
+          const dueSoon = !overdue && daysToRenewal <= 5;
+          const rowClass = overdue ? 'overdue' : (dueSoon ? 'due-soon' : '');
+          paymentRow = `<div class="payment-row ${rowClass}">Member ${memberDays}d · Renews ${renewal} (${daysToRenewal}d)</div>`;
+        }
+
+        const accountParts = [];
+        if(c.initialBalance != null) accountParts.push(`Bal $${Number(c.initialBalance).toLocaleString()}`);
+        if(c.dateFunded) accountParts.push(`Funded ${c.dateFunded}`);
+        if(c.dashboardTokenId) accountParts.push('Token ✓');
+        if(c.hasPrivateKey) accountParts.push('🔑 Key set');
+        const copyBtns = c.dashboardTokenId
+          ? ` <button type="button" class="copy-mini" title="Copy token" onclick="copyClientToken('${c.id}', this)">⧉</button><button type="button" class="copy-mini" title="Copy dashboard link" onclick="copyClientDashboardLink('${c.id}', this)">🔗</button>`
+          : '';
+        const accountRow = accountParts.length ? `<div class="payment-row">${accountParts.join(' · ')}${copyBtns}</div>` : '';
+        const walletRow = c.dexWalletAddress
+          ? `<div class="payment-row">Wallet ${truncateMiddle(c.dexWalletAddress)}<button type="button" class="copy-mini" title="Copy wallet address" onclick="copyClientWallet('${c.id}', this)">⧉</button></div>`
+          : '';
+
+        const advanceBlocked = (idx === AGENT_PENDING_STAGE && !c.agentApproved);
+
+        card.innerHTML = `
+          <div class="card-name">${escapeHtml(c.name)}</div>
+          <div class="card-source">${escapeHtml(c.source)} · #${pad3(c.clientNumber)}${c.referredBy ? ' · ref: ' + escapeHtml(c.referredBy) : ''}</div>
+          <div class="pulse-row">
+            <div class="pulse-dot ${pulseClass(c)}"></div>
+            <div class="pulse-text">${pulseLabel(c)}</div>
+          </div>
+          ${paymentRow}
+          ${accountRow}
+          ${walletRow}
+          ${toggleRow}
+          ${activityLogBlock(c)}
+          <div class="card-actions">
+            <button class="stall-btn" title="Move back a stage" ${idx === 0 ? 'disabled' : ''} onclick="retreatClient('${c.id}')">←</button>
+            <button ${advanceBlocked ? 'disabled title="Confirm the agent wallet is approved first"' : ''} onclick="${isLast ? `graduateClient('${c.id}')` : `advanceClient('${c.id}')`}" ${isLast ? 'class="promote-btn"' : ''}>${isLast ? '🎉 Go Live' : 'Advance →'}</button>
+            <button class="stall-btn" title="Edit" onclick="startEdit('${c.id}')">✎</button>
+            ${activityLogButton(c)}
+            <button class="stall-btn" title="Mark stalled / reactivate" onclick="toggleStall('${c.id}')">${c.stalled ? '↺' : '⏸'}</button>
+            <button class="stall-btn" title="Remove" onclick="removeClient('${c.id}')">✕</button>
+          </div>
+        `;
+        col.appendChild(card);
+      });
+    }
+    funnel.appendChild(col);
+  });
+
+  return funnel;
+}
+
+function buildLiveClients(){
+  const wrap = document.createElement('div');
+  wrap.className = 'live-clients-grid';
+
+  if(state.liveClients.length === 0){
+    wrap.innerHTML = `<div class="empty-slot">No live clients yet — graduate someone from the Exchange stage in Pipeline to see them here.</div>`;
+    return wrap;
+  }
+
+  const summaryBar = document.createElement('div');
+  summaryBar.style.cssText = 'grid-column:1/-1;';
+
+  // Total AUM — sum of confirmed live balances across all live clients
+  const okBalances = state.liveClients
+    .map(c => liveBalances[c.id])
+    .filter(b => b && b.status === 'ok');
+  const totalAum = okBalances.reduce((sum, b) => sum + b.balance, 0);
+  const aumCoverage = `${okBalances.length}/${state.liveClients.length} accounts`;
+
+  // Daily P&L — from the /api/clients/daily-pnl fetch
+  const pnlVal = dailyPnl.total.pnl || 0;
+  const pnlTrades = dailyPnl.total.trades || 0;
+  const pnlColor = pnlVal > 0 ? 'var(--green)' : (pnlVal < 0 ? 'var(--rust)' : 'var(--text-dim)');
+  const pnlSign = pnlVal > 0 ? '+' : '';
+
+  // Renewal reminders — same overdue/due-soon logic as each card's own payment row
+  const reminders = [];
+  state.liveClients.forEach(c => {
+    if(!c.datePaid) return;
+    const renewal = nextRenewalDate(c.datePaid);
+    const daysToRenewal = daysBetween(todayStr(), renewal);
+    if(daysToRenewal <= 1) reminders.push({ name: c.name, daysToRenewal, overdue: true });
+    else if(daysToRenewal <= 5) reminders.push({ name: c.name, daysToRenewal, overdue: false });
+  });
+  reminders.sort((a,b) => a.daysToRenewal - b.daysToRenewal);
+  const reminderHtml = reminders.length
+    ? reminders.map(r => `<span style="color:${r.overdue ? 'var(--rust)' : 'var(--gold)'}">${escapeHtml(r.name)} ${r.overdue ? `overdue by ${Math.abs(r.daysToRenewal)}d` : `renews in ${r.daysToRenewal}d`}</span>`).join(' · ')
+    : '<span style="color:var(--text-faint)">No renewals due this week</span>';
+
+  summaryBar.innerHTML = `
+    <div class="card" style="margin-bottom:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div style="font-size:11px; color:var(--text-faint);">TOTAL AUM (${aumCoverage})</div>
+          <div style="font-size:22px; font-weight:700; color:var(--gold);">$${totalAum.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        </div>
+        <div>
+          <div style="font-size:11px; color:var(--text-faint);">TODAY'S P&amp;L (all clients)</div>
+          <div style="font-size:22px; font-weight:700; color:${pnlColor};">${pnlSign}$${Math.abs(pnlVal).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} <span style="font-size:12px; font-weight:400; color:var(--text-faint);">(${pnlTrades} trades)</span></div>
+        </div>
+        <button type="button" class="save-btn" style="padding:6px 12px; font-size:12px;" onclick="refreshLiveData()">↻ Refresh</button>
+      </div>
+      <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--hairline); font-size:12.5px;">
+        <span style="color:var(--text-faint)">RENEWALS: </span>${reminderHtml}
+      </div>
+    </div>
+  `;
+  wrap.appendChild(summaryBar);
+
+  state.liveClients.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    if(editingId === c.id){
+      const sourceOptions = SOURCES.map(s => `<option value="${s}" ${c.source===s?'selected':''}>${s}</option>`).join('');
+      card.innerHTML = `
+        <div class="edit-form">
+          <div>
+            <label>Name</label>
+            <input id="edit-name-${c.id}" value="${escapeHtml(c.name)}" />
+          </div>
+          <div>
+            <label>Source</label>
+            <select id="edit-source-${c.id}">${sourceOptions}</select>
+          </div>
+          <div id="edit-referredByWrap-${c.id}" style="display:${c.source==='Referral' ? '' : 'none'};">
+            <label>Referred by</label>
+            <input id="edit-referredBy-${c.id}" value="${escapeHtml(c.referredBy || '')}" />
+          </div>
+          <div>
+            <label>Date paid</label>
+            <input id="edit-datePaid-${c.id}" type="date" value="${c.datePaid || ''}" />
+          </div>
+          <div>
+            <label>Initial balance ($)</label>
+            <input id="edit-initialBalance-${c.id}" type="number" step="0.01" value="${c.initialBalance != null ? c.initialBalance : ''}" placeholder="0.00" />
+          </div>
+          <div>
+            <label>Date funded</label>
+            <input id="edit-dateFunded-${c.id}" type="date" value="${c.dateFunded || ''}" />
+          </div>
+          <div>
+            <label>Client # (never 1 — reserved for Nathan's master account)</label>
+            <input id="edit-clientNumber-${c.id}" type="number" min="2" value="${c.clientNumber || ''}" />
+          </div>
+          <div>
+            <label>Dashboard token ID</label>
+            <div style="display:flex; gap:6px;">
+              <input id="edit-dashboardTokenId-${c.id}" value="${escapeHtml(c.dashboardTokenId || '')}" placeholder="CLIENT${c.clientNumber || 'N'}_DASHBOARD_TOKEN value" style="flex:1;" />
+              <button type="button" class="save-btn" style="flex:none; padding:7px 10px;" onclick="generateDashboardToken('${c.id}')">Generate</button>
+            </div>
+          </div>
+          <div>
+            <label>DEX wallet address</label>
+            <input id="edit-dexWalletAddress-${c.id}" value="${escapeHtml(c.dexWalletAddress || '')}" placeholder="0x..." />
+          </div>
+          <div>
+            <label>DEX private key (agent wallet) — ${c.hasPrivateKey ? 'configured' : 'not set'}</label>
+            <div style="display:flex; gap:6px;">
+              <input id="edit-privateKeyInput-${c.id}" type="password" placeholder="Paste to set/replace" style="flex:1;" />
+              <button type="button" class="save-btn" style="flex:none; padding:7px 10px;" onclick="setClientKey('${c.id}')">Set</button>
+            </div>
+            <div style="display:flex; gap:6px; margin-top:6px; align-items:center;">
+              <button type="button" class="cancel-btn" style="flex:none; padding:6px 10px;" ${c.hasPrivateKey ? '' : 'disabled'} onclick="revealClientKey('${c.id}')">Reveal</button>
+              <button type="button" id="copyKeyBtn-${c.id}" class="copy-mini" style="padding:6px 10px;" disabled onclick="copyRevealedKey('${c.id}', this)">Copy</button>
+              <button type="button" class="cancel-btn" style="flex:none; padding:6px 10px;" ${c.hasPrivateKey ? '' : 'disabled'} onclick="clearClientKey('${c.id}')">Clear</button>
+              <span id="revealedKey-${c.id}" class="mono" style="font-size:10px; word-break:break-all; color:var(--gold);"></span>
+            </div>
+          </div>
+          <div class="edit-form-actions">
+            <button class="save-btn" onclick="saveEdit('${c.id}')">Save</button>
+            <button class="cancel-btn" onclick="cancelEdit()">Cancel</button>
+          </div>
+        </div>
+      `;
+      wrap.appendChild(card);
+      const editSourceSel = card.querySelector(`[id="edit-source-${c.id}"]`);
+      const editReferredByWrap = card.querySelector(`[id="edit-referredByWrap-${c.id}"]`);
+      editSourceSel.addEventListener('change', () => {
+        editReferredByWrap.style.display = editSourceSel.value === 'Referral' ? '' : 'none';
+      });
+      return;
+    }
+
+    let paymentRow = `<div class="payment-row no-date">No payment date set</div>`;
+    if(c.datePaid){
+      const memberDays = daysBetween(c.datePaid, todayStr());
+      const renewal = nextRenewalDate(c.datePaid);
+      const daysToRenewal = daysBetween(todayStr(), renewal);
+      const overdue = daysToRenewal <= 1;
+      const dueSoon = !overdue && daysToRenewal <= 5;
+      const rowClass = overdue ? 'overdue' : (dueSoon ? 'due-soon' : '');
+      paymentRow = `<div class="payment-row ${rowClass}">Member ${memberDays}d · Renews ${renewal} (${daysToRenewal}d)</div>`;
+    }
+
+    const accountParts = [];
+    if(c.initialBalance != null) accountParts.push(`Bal $${Number(c.initialBalance).toLocaleString()}`);
+    if(c.dateFunded) accountParts.push(`Funded ${c.dateFunded}`);
+    if(c.dashboardTokenId) accountParts.push('Token ✓');
+    if(c.hasPrivateKey) accountParts.push('🔑 Key set');
+    const copyBtns = c.dashboardTokenId
+      ? ` <button type="button" class="copy-mini" title="Copy token" onclick="copyClientToken('${c.id}', this)">⧉</button><button type="button" class="copy-mini" title="Copy dashboard link" onclick="copyClientDashboardLink('${c.id}', this)">🔗</button>`
+      : '';
+    const accountRow = accountParts.length ? `<div class="payment-row">${accountParts.join(' · ')}${copyBtns}</div>` : '';
+    const walletRow = c.dexWalletAddress
+      ? `<div class="payment-row">Wallet ${truncateMiddle(c.dexWalletAddress)}<button type="button" class="copy-mini" title="Copy wallet address" onclick="copyClientWallet('${c.id}', this)">⧉</button></div>`
+      : '';
+    const lb = liveBalances[c.id];
+    let liveBalanceRow = '';
+    if(c.dexWalletAddress){
+      if(lb && lb.status === 'ok'){
+        liveBalanceRow = `<div class="payment-row"><b style="color:var(--gold)">Live: $${Number(lb.balance).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>`;
+      } else if(lb && lb.status === 'error'){
+        liveBalanceRow = `<div class="payment-row" style="color:var(--text-faint)">Live balance unavailable</div>`;
+      } else {
+        liveBalanceRow = `<div class="payment-row" style="color:var(--text-faint)">Loading live balance…</div>`;
+      }
+    }
+
+    const toggleRow = `
+      <div class="toggle-row">
+        <div class="toggle-chip ${c.commandsFunctioning ? 'on' : ''}" onclick="toggleStatus('${c.id}','commandsFunctioning')">Commands Functioning</div>
+        <div class="toggle-chip ${c.testTradesSuccessful ? 'on' : ''}" onclick="toggleStatus('${c.id}','testTradesSuccessful')">Test Trades Successful</div>
+        <div class="toggle-chip ${c.accountFullyFunded ? 'on' : ''}" onclick="toggleStatus('${c.id}','accountFullyFunded')">Account Fully Funded</div>
+      </div>`;
+
+    card.innerHTML = `
+      <div class="card-name">${escapeHtml(c.name)}</div>
+      <div class="card-source">${escapeHtml(c.source)} · #${pad3(c.clientNumber)}${c.referredBy ? ' · ref: ' + escapeHtml(c.referredBy) : ''}</div>
+      ${paymentRow}
+      ${liveBalanceRow}
+      ${accountRow}
+      ${walletRow}
+      ${toggleRow}
+      ${activityLogBlock(c)}
+      <div class="card-actions">
+        <button class="stall-btn" title="Move back to Exchange (undo)" onclick="retreatToExchange('${c.id}')">← Exchange</button>
+        <button class="stall-btn" title="Edit" onclick="startEdit('${c.id}')">✎</button>
+        ${activityLogButton(c)}
+        <button class="stall-btn" title="Mark stalled / reactivate" onclick="toggleStall('${c.id}')">${c.stalled ? '↺' : '⏸'}</button>
+        <button class="stall-btn" title="Remove" onclick="removeLiveClient('${c.id}')">✕</button>
+      </div>
+    `;
+    wrap.appendChild(card);
+  });
+
+  return wrap;
+}
+
+function buildProspectFunnel(){
+  const funnel = document.createElement('div');
+  funnel.className = 'prospect-funnel';
+
+  PROSPECT_STAGES.forEach((stageName, idx) => {
+    const col = document.createElement('div');
+    col.className = 'stage-col';
+    col.dataset.stage = idx;
+    const inStage = state.prospects.filter(p => p.stage === idx);
+    col.innerHTML = `<div class="stage-head"><span class="stage-name">${stageName}</span><span class="stage-count">${inStage.length}</span></div>`;
+    if(inStage.length === 0){
+      col.innerHTML += `<div class="empty-slot">No prospects here</div>`;
+    } else {
+      inStage.forEach(p => {
+        const isLast = idx === PROSPECT_LAST_STAGE;
+        const days = daysBetween(p.addedDate, todayStr());
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        let toggleRow = '';
+        if(idx === 1){
+          toggleRow = `
+          <div class="toggle-row">
+            <div class="toggle-chip ${p.discussedBotCall ? 'on' : ''}" onclick="toggleProspectStatus('${p.id}','discussedBotCall')">Call</div>
+            <div class="toggle-chip ${p.discussedBotInPerson ? 'on' : ''}" onclick="toggleProspectStatus('${p.id}','discussedBotInPerson')">In-person</div>
+          </div>`;
+        } else if(idx === 2){
+          toggleRow = `
+          <div class="toggle-row">
+            <div class="toggle-chip ${p.discussed2xCall ? 'on' : ''}" onclick="toggleProspectStatus('${p.id}','discussed2xCall')">Call</div>
+            <div class="toggle-chip ${p.discussed2xInPerson ? 'on' : ''}" onclick="toggleProspectStatus('${p.id}','discussed2xInPerson')">In-person</div>
+          </div>`;
+        } else if(idx === 3){
+          toggleRow = `
+          <div class="toggle-row">
+            <div class="toggle-chip ${p.materialProfits ? 'on' : ''}" onclick="toggleProspectStatus('${p.id}','materialProfits')">Profits</div>
+            <div class="toggle-chip ${p.materialWebsite ? 'on' : ''}" onclick="toggleProspectStatus('${p.id}','materialWebsite')">Website</div>
+          </div>`;
+        }
+
+        card.innerHTML = `
+          <div class="card-name">${escapeHtml(p.name)}</div>
+          <div class="card-source">${escapeHtml(p.source)}${p.referredBy ? ' · ref: ' + escapeHtml(p.referredBy) : ''}</div>
+          <div class="pulse-row">
+            <div class="pulse-text">added ${days === 0 ? 'today' : days + 'd ago'}</div>
+          </div>
+          ${toggleRow}
+          <div class="card-actions">
+            <button class="stall-btn" title="Move back a stage" ${idx === 0 ? 'disabled' : ''} onclick="retreatProspect('${p.id}')">←</button>
+            <button ${isLast ? 'disabled' : ''} onclick="advanceProspect('${p.id}')">${isLast ? '— ' : 'Advance →'}</button>
+            <button class="promote-btn" onclick="promoteProspect('${p.id}')">Promote</button>
+            <button class="stall-btn" title="Remove / declined" onclick="declineProspect('${p.id}')">✕</button>
+          </div>
+        `;
+        col.appendChild(card);
+      });
+    }
+    funnel.appendChild(col);
+  });
+
+  return funnel;
+}
+
+function generateDashboardToken(id){
+  // Lowercase letters + digits only — no uppercase, no symbols — so it
+  // reads cleanly if you ever need to glance at it or share it manually,
+  // instead of looking like line noise.
+  // 12 characters from a 36-symbol alphabet is ~62 bits of entropy. This
+  // token only guards a READ-ONLY balance view (not funds, not a private
+  // key), and there's no rate limiting on the dashboard endpoint to worry
+  // about tripping — the real-world constraint on guessing it is network
+  // round-trips, not offline hashing speed, so 62 bits is a very
+  // comfortable margin for that threat model. Generated via rejection
+  // sampling on the Web Crypto API (a real CSPRNG) so no character comes
+  // up more often than any other.
+  const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const LENGTH = 12;
+  let token = '';
+  const buf = new Uint8Array(1);
+  while (token.length < LENGTH) {
+    crypto.getRandomValues(buf);
+    // Reject bytes that don't divide evenly into the alphabet size, so
+    // every symbol remains equally likely rather than the low end of the
+    // byte range being slightly favoured.
+    if (buf[0] < 252) { // 252 = 7 * 36, the largest multiple of 36 under 256
+      token += ALPHABET[buf[0] % 36];
+    }
+  }
+  const input = document.getElementById(`edit-dashboardTokenId-${id}`);
+  if (input) input.value = token;
+}
+
+function flashCopyFeedback(btn){
+  const original = btn.textContent;
+  btn.textContent = 'Copied';
+  setTimeout(() => { btn.textContent = original; }, 1200);
+}
+
+function copyClientWallet(id, btn){
+  const c = findClientAnywhere(id);
+  if (!c || !c.dexWalletAddress) return;
+  navigator.clipboard.writeText(c.dexWalletAddress);
+  flashCopyFeedback(btn);
+}
+
+function copyClientToken(id, btn){
+  const c = findClientAnywhere(id);
+  if (!c || !c.dashboardTokenId) return;
+  navigator.clipboard.writeText(c.dashboardTokenId);
+  if (btn) flashCopyFeedback(btn);
+}
+
+function copyClientDashboardLink(id, btn){
+  const c = findClientAnywhere(id);
+  if (!c || !c.dashboardTokenId) return;
+  const link = `${DASHBOARD_BASE_URL}/?t=${c.dashboardTokenId}`;
+  navigator.clipboard.writeText(link);
+  if (btn) flashCopyFeedback(btn);
+}
+
+function truncateMiddle(s, front, back){
+  front = front || 6; back = back || 4;
+  if(!s || s.length <= front + back + 1) return s;
+  return s.slice(0, front) + '…' + s.slice(-back);
+}
+
+function escapeHtml(s){
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function launchConfetti(){
+  const colors = ['#C9A227', '#3ECF8E', '#E8C862', '#E8E6DE'];
+  for(let i=0; i<60; i++){
+    const el = document.createElement('div');
+    el.className = 'confetti';
+    el.style.left = Math.random()*100 + 'vw';
+    el.style.background = colors[Math.floor(Math.random()*colors.length)];
+    el.style.transform = `rotate(${Math.random()*360}deg)`;
+    document.body.appendChild(el);
+    const duration = 1800 + Math.random()*1200;
+    el.animate([
+      { transform: `translateY(0) rotate(0deg)`, opacity:1 },
+      { transform: `translateY(100vh) rotate(${360+Math.random()*360}deg)`, opacity:0.2 }
+    ], { duration, easing:'ease-in' });
+    setTimeout(() => el.remove(), duration);
+  }
+}
+
+let liveBalances = {}; // {clientId: {status, balance}} — fetched from Hyperliquid, not part of saved state
+let dailyPnl = { clients: {}, total: { pnl: 0, trades: 0 } }; // same — fetched fresh, not saved state
+
+async function loadLiveBalances(){
+  try{
+    const res = await fetch('/api/clients/balances', {
+      headers: { ...(PIPELINE_KEY ? { 'x-pipeline-key': PIPELINE_KEY } : {}) }
+    });
+    if(!res.ok) return;
+    const data = await res.json();
+    liveBalances = data.balances || {};
+    render();
+  }catch(e){ /* non-fatal — live balance is a bonus, not core to the CRM */ }
+}
+
+async function loadDailyPnl(){
+  try{
+    const res = await fetch('/api/clients/daily-pnl', {
+      headers: { ...(PIPELINE_KEY ? { 'x-pipeline-key': PIPELINE_KEY } : {}) }
+    });
+    if(!res.ok) return;
+    const data = await res.json();
+    dailyPnl = data;
+    render();
+  }catch(e){ /* non-fatal */ }
+}
+
+function refreshLiveData(){
+  loadLiveBalances();
+  loadDailyPnl();
+}
+
+loadState();
+refreshLiveData();
+setInterval(refreshLiveData, 60 * 60 * 1000); // hourly auto-refresh
+</script>
+</body>
+</html>
