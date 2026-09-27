@@ -1,0 +1,7 @@
+flask
+requests
+websocket-client
+hyperliquid-python-sdk
+eth-account
+psycopg2-binary
+pywebpush
