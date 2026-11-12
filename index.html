@@ -215,7 +215,7 @@ body{
   <div id="adminTradeActions" class="admin-panel hidden">
     <div class="card" style="margin-top:12px">
       <div class="section" style="padding:0 0 10px">Trade Actions</div>
-      <div class="hrow-meta" style="margin:-4px 0 12px">Only press these if you need more SL room, or think the trade is running harder in your direction.</div>
+      <div class="hrow-meta" style="margin:-4px 0 12px">Only press these if you think the trade is running harder in your direction. The SL can only be tightened, never wider than 0.40%.</div>
       <div class="hrow-meta">TP1 (% from entry)</div>
       <div style="display:flex;gap:6px;margin:4px 0 14px">
         <button class="btn-ghost" style="flex:1;margin:0;padding:10px 0" onclick="submitTradeAction('tp1',0.50)">0.50</button>
@@ -887,6 +887,14 @@ function qtShow(state, text) {
   clearTimeout(qtHideTimer);
   qtBanner.className = "qt-banner " + state;
   qtBanner.textContent = text;
+  const blockedDir = state === "failed" && /blocked list for (long|short)s|blocked when the 5m moves/.test(text) ? (/LONG/.test(text) ? "long" : /SHORT/.test(text) ? "short" : (/for longs|Longs are/.test(text) ? "long" : "short")) : null;
+  if (blockedDir) {
+    const b = document.createElement("button");
+    b.className = "btn-ghost"; b.style.cssText = "display:block;margin:10px auto 0;padding:9px 16px";
+    b.textContent = `Trade ${blockedDir.toUpperCase()} anyway`;
+    b.onclick = () => quickTrade(blockedDir + "_anyway");
+    qtBanner.appendChild(b);
+  }
   const busy = state === "pending";
   qtLong.disabled = qtShort.disabled = qtClose.disabled = busy;
   document.querySelectorAll(".stair-btn").forEach(b => b.disabled = busy);
@@ -898,7 +906,7 @@ async function qtPoll() {
     const r = await fetch(window.location.origin + "/api/admin/quick-trade?t=" + encodeURIComponent(TOKEN));
     const d = await r.json();
     if (d.state === "pending") {
-      const w = { long: "LONG", short: "SHORT", close: "close", take: "setup" }[d.action] || "trade";
+      const w = { long: "LONG", short: "SHORT", long_anyway: "LONG", short_anyway: "SHORT", close: "close", take: "setup" }[d.action] || "trade";
       qtShow("pending", `⏳ Sending ${w} order… waiting for the exchange`);
       return;
     }
@@ -909,8 +917,8 @@ async function qtPoll() {
   } catch (e) { /* keep polling */ }
 }
 async function quickTrade(action) {
-  const names = { long: "Open a LONG", short: "Open a SHORT", close: "CLOSE the position" };
-  if (!confirm(`${names[action]}? This is a real order and uses the same checks as /${action} in Telegram.`)) return;
+  const names = { long: "Open a LONG", short: "Open a SHORT", close: "CLOSE the position", long_anyway: "Open a LONG ANYWAY (skips the blocked-colours rules only)", short_anyway: "Open a SHORT ANYWAY (skips the blocked-colours rules only)" };
+  if (!confirm(`${names[action]}? This is a real order${action.endsWith("_anyway") ? ", and it is logged in the tracker as a manual override" : " and uses the same checks as /" + action + " in Telegram"}.`)) return;
   qtShow("pending", "⏳ Sending… waiting for the exchange");
   try {
     const r = await fetch(window.location.origin + "/api/admin/quick-trade?t=" + encodeURIComponent(TOKEN), {
@@ -936,10 +944,19 @@ async function stairAct(action, label) {
   } catch (e) { qtShow("failed", "⚠️ Request failed: " + e.message); }
 }
 
+// Console alerts (order failures, missing TP/SL, margin errors). Dismissed ids are remembered per browser.
+function dismissedAlerts() { try { return JSON.parse(localStorage.getItem("orion-dismissed-alerts") || "[]"); } catch (e) { return []; } }
+function dismissAlert(id) {
+  try { const d = dismissedAlerts(); d.push(id); localStorage.setItem("orion-dismissed-alerts", JSON.stringify(d.slice(-60))); } catch (e) {}
+  if (window._lastStair) renderStairLive(window._lastStair);
+}
 function renderStairLive(st) {
+  window._lastStair = st;
   const el = stairLive;
+  const _dis = dismissedAlerts();
+  const alertsList = ((st && st.alerts) || []).filter(a => !_dis.includes(a.id));
   const lastOnly = (st && st.last || []).filter(x => !x.takeable);   // the last fired setup, kept until its window ends (Take only shows on the live card above)
-  if (!st || ((st.live || []).length === 0 && (st.near || []).length === 0 && lastOnly.length === 0 && !st.note)) { el.classList.add("hidden"); el.innerHTML = ""; return; }
+  if (!st || ((st.live || []).length === 0 && (st.near || []).length === 0 && lastOnly.length === 0 && !st.note && !st.rc && alertsList.length === 0)) { el.classList.add("hidden"); el.innerHTML = ""; return; }
   const now = Date.now() / 1000;
   const live = (st.live || []).map(x => {
     const mins = Math.max(0, Math.ceil((x.expires_at - now) / 60));
@@ -958,7 +975,15 @@ function renderStairLive(st) {
   const near = (st.near || []).length
     ? `<div class="stair-near">Close to firing: ${(st.near || []).map(n => `<b>${n.direction === "long" ? "Long" : "Short"} ${n.letter}</b> · ${n.steps || 1} step${(n.steps || 1) > 1 ? "s" : ""} (${n.missing})`).join(" · ")}</div>` : "";
   const nt = st.note ? `<div class="stair-near" style="border:1px solid ${st.note.tone === "bull" ? "#35e58a" : "#ff626a"};background:${st.note.tone === "bull" ? "rgba(53,229,138,.07)" : "rgba(255,98,106,.07)"};color:inherit"><b>${st.note.tone === "bull" ? "⚡" : "⚠"} ${st.note.title}</b><br>${st.note.text}</div>` : "";
-  el.innerHTML = nt + live + pinned + near;
+  const rcB = st.rc ? `<div class="stair-near" style="border:2px solid ${st.rc.direction === "long" ? "#35e58a" : "#ff626a"};background:${st.rc.direction === "long" ? "rgba(53,229,138,.10)" : "rgba(255,98,106,.10)"};color:inherit"><b>${st.rc.direction === "long" ? "▲" : "▼"} ${st.rc.title}</b><br>${st.rc.text}</div>` : "";
+  const colours = { error: ["#ff626a", "rgba(255,98,106,.10)", "🛑"], warn: ["#f5a623", "rgba(245,166,35,.10)", "⚠️"], ok: ["#35e58a", "rgba(53,229,138,.08)", "✅"] };
+  const alertsHtml = alertsList.map(a => {
+    const c = colours[a.level] || colours.warn;
+    const ago = Math.max(0, Math.floor((now - a.t) / 60));
+    const esc = x => String(x == null ? "" : x).replace(/[&<>]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch]));
+    return `<div class="stair-near" style="border:2px solid ${c[0]};background:${c[1]};color:inherit;display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><span><b>${c[2]} ${esc(a.title)}</b> <span class="hrow-meta">${ago}m ago</span><br>${esc(a.text)}</span><button class="btn-ghost" style="padding:4px 9px;font-size:11px;margin:0;flex:none" onclick="dismissAlert(${a.id})">Dismiss</button></div>`;
+  }).join("");
+  el.innerHTML = alertsHtml + rcB + nt + live + pinned + near;
   el.classList.remove("hidden");
 }
 
@@ -1273,10 +1298,12 @@ async function load(first = false) {
       } else {
         posE2FilledRow.style.display = "none";
       }
+      const levX = (p.margin > 0 && notional > 0) ? notional / Number(p.margin) : (Number(p.leverage) || 60);
       const setLevelRow = (row, el, level) => {
         if (!isMaster || !level) { row.style.display = "none"; return; }
         row.style.display = "flex";
-        el.textContent = `${usd(level.price)}  (${level.pct_from_entry.toFixed(2)}% — ${money(level.usd)})`;
+        const roi = level.pct_from_entry * levX;   // same number Binance shows as ROI: price move × leverage
+        el.textContent = `${usd(level.price)}  (${level.pct_from_entry.toFixed(2)}% · ${roi.toFixed(1)}% ROI — ${money(level.usd)})`;
       };
       setLevelRow(posTp1Row, posTp1, p.tp1);
       posTp1Row.firstElementChild.innerHTML = p.tp1_hit ? '🎯 TP1 <span class="green" style="font-weight:700">✓</span>' : '🎯 TP1';
